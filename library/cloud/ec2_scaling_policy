@@ -70,6 +70,18 @@ except ImportError:
     sys.exit(1)
 
 
+def sp_return_values(sp):
+    return dict(
+        name=sp.name,
+        arn=sp.policy_arn,
+        as_name=sp.as_name,
+        scaling_adjustment=sp.scaling_adjustment,
+        cooldown=sp.cooldown,
+        adjustment_type=sp.adjustment_type,
+        min_adjustment_step=sp.min_adjustment_step
+    )
+
+
 def create_scaling_policy(connection, module):
     sp_name = module.params.get('name')
     adjustment_type = module.params.get('adjustment_type')
@@ -90,8 +102,9 @@ def create_scaling_policy(connection, module):
             cooldown=cooldown)
 
         try:
-            connection.create_scaling_policy(sp)
-            module.exit_json(changed=True)
+            req = connection.create_scaling_policy(sp)
+            sp.policy_arn = req.PolicyARN
+            module.exit_json(changed=True, **sp_return_values(sp))
         except BotoServerError, e:
             module.fail_json(msg=str(e))
     else:
@@ -117,8 +130,7 @@ def create_scaling_policy(connection, module):
             if changed:
                 connection.create_scaling_policy(policy)
                 policy = connection.get_all_policies(policy_names=[sp_name])[0]
-                module.exit_json(changed=changed, name=policy.name, arn=policy.policy_arn, as_name=policy.as_name, scaling_adjustment=policy.scaling_adjustment, cooldown=policy.cooldown, adjustment_type=policy.adjustment_type, min_adjustment_step=policy.min_adjustment_step)
-            module.exit_json(changed=changed)
+            module.exit_json(changed=changed, **sp_return_values(policy))
         except BotoServerError, e:
             module.fail_json(msg=str(e))
 
@@ -130,13 +142,14 @@ def delete_scaling_policy(connection, module):
     scalingPolicies = connection.get_all_policies(as_group=asg_name,policy_names=[sp_name])
 
     if scalingPolicies:
+        policy = scalingPolicies[0]
         try:
             connection.delete_policy(sp_name, asg_name)
-            module.exit_json(changed=True)
+            module.exit_json(changed=True, **sp_return_values(policy))
         except BotoServerError, e:
-            module.exit_json(changed=False, msg=str(e))
+            module.fail_json(msg=str(e))
     else:
-        module.exit_json(changed=False)
+        module.exit_json(changed=False, name=sp_name, as_name=asg_name)
 
 
 def main():
