@@ -128,6 +128,29 @@ except ImportError:
     sys.exit(1)
 
 
+metric_comparisons = {'<=' : 'LessThanOrEqualToThreshold', '<' : 'LessThanThreshold', '>=' : 'GreaterThanOrEqualToThreshold', '>' : 'GreaterThanThreshold'}
+rev_metric_comparisons = dict((v, k) for (k, v) in metric_comparisons.iteritems())
+
+
+def alarm_return_values(alarm):
+    return dict(
+        name=alarm.name,
+        metric=alarm.metric,
+        namespace=alarm.namespace,
+        statistic=alarm.statistic,
+        comparison=rev_metric_comparisons[alarm.comparison],
+        threshold=alarm.threshold,
+        period=alarm.period,
+        evaluation_periods=alarm.evaluation_periods,
+        unit=alarm.unit,
+        description=alarm.description,
+        dimensions=alarm.dimensions,
+        alarm_actions=alarm.alarm_actions,
+        insufficient_data_actions=alarm.insufficient_data_actions,
+        ok_actions=alarm.ok_actions,
+    )
+
+
 def create_metric_alarm(connection, module):
     
     name = module.params.get('name')
@@ -180,9 +203,7 @@ def create_metric_alarm(connection, module):
                 changed = True
                 setattr(alarm, attr, module.params.get(attr))
         #this is to deal with a current bug where you cannot assign '<=>' to the comparator when modifying an existing alarm
-        comparison = alarm.comparison
-        comparisons = {'<=' : 'LessThanOrEqualToThreshold', '<' : 'LessThanThreshold', '>=' : 'GreaterThanOrEqualToThreshold', '>' : 'GreaterThanThreshold'}
-        alarm.comparison = comparisons[comparison]
+        alarm.comparison = metric_comparisons[alarm.comparison]
 
         dim1 = module.params.get('dimensions')
         dim2 = alarm.dimensions
@@ -203,7 +224,7 @@ def create_metric_alarm(connection, module):
         try:
             if changed:
                 connection.create_alarm(alarm)
-            module.exit_json(changed=changed)
+            module.exit_json(changed=changed, **alarm_return_values(alarm))
         except BotoServerError, e:
             module.fail_json(msg=str(e))
 
@@ -214,13 +235,14 @@ def delete_metric_alarm(connection, module):
     alarms = connection.describe_alarms(alarm_names=[name])
     
     if alarms:
+        alarm = alarms[0]
         try:
             connection.delete_alarms([name])
-            module.exit_json(changed=True)
+            module.exit_json(changed=True, **alarm_return_values(alarm))
         except BotoServerError, e:
             module.fail_json(msg=str(e))
     else:
-        module.exit_json(changed=False)
+        module.exit_json(changed=False, name=name)
 
 
 def main():
