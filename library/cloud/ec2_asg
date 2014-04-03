@@ -121,6 +121,19 @@ def enforce_required_arguments(module):
         module.fail_json(msg="Missing required arguments for autoscaling group create/update: %s" % ",".join(missing_args))
 
 
+def asg_return_values(asg):
+    return dict(
+        name=asg.name,
+        availability_zones=asg.availability_zones,
+        launch_config=asg.launch_config_name,
+        load_balancers=asg.load_balancers,
+        vpc_zone_identifier=asg.vpc_zone_identifier,
+        desired_capacity=asg.desired_capacity,
+        min_size=asg.min_size,
+        max_size=asg.max_size,
+    )
+
+
 def create_autoscaling_group(connection, module):
     enforce_required_arguments(module)
 
@@ -151,7 +164,7 @@ def create_autoscaling_group(connection, module):
 
         try:
             connection.create_auto_scaling_group(ag)
-            module.exit_json(changed=True)
+            module.exit_json(changed=True, **asg_return_values(ag))
         except BotoServerError, e:
             module.fail_json(msg=str(e))
     else:
@@ -171,7 +184,7 @@ def create_autoscaling_group(connection, module):
         try:
             if changed:
                 as_group.update()
-            module.exit_json(changed=changed)
+            module.exit_json(changed=changed, **asg_return_values(as_group))
         except BotoServerError, e:
             module.fail_json(msg=str(e))
 
@@ -193,9 +206,9 @@ def delete_autoscaling_group(connection, module):
             time.sleep(10)
 
         group.delete()
-        module.exit_json(changed=True)
+        module.exit_json(changed=True, **asg_return_values(group))
     else:
-        module.exit_json(changed=False)
+        module.exit_json(changed=False, name=group_name)
 
 
 def main():
