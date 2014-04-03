@@ -121,6 +121,7 @@ except ImportError:
 
 ASG_ATTRIBUTES = ('launch_config_name', 'max_size', 'min_size', 'desired_capacity',
                      'vpc_zone_identifier', 'availability_zones')
+SPECIAL_ATTRIBUTES = ('availability_zones',)
 
 def enforce_required_arguments(module):
     ''' As many arguments are not required for autoscale group deletion
@@ -201,9 +202,16 @@ def create_autoscaling_group(connection, module):
         as_group = as_groups[0]
         changed = False
         for attr in ASG_ATTRIBUTES:
+            if attr in SPECIAL_ATTRIBUTES:
+                continue
             if module.params.get(attr) and getattr(as_group, attr) != module.params.get(attr):
                 changed = True
                 setattr(as_group, attr, module.params.get(attr))
+
+        # handle availability zones separately as the orders can be different
+        if sorted(as_group.availability_zones) != sorted(availability_zones):
+            changed = True
+            as_group.availability_zones = availability_zones
 
         if len(set_tags) > 0:
             existing_tags = as_group.tags
