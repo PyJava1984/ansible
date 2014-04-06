@@ -227,7 +227,7 @@ def create_image(module, ec2):
 
     # wait here until the image is created
     wait_timeout = time.time() + wait_timeout
-    while wait and wait_timeout > time.time() and (img is None or img.state != 'available'):
+    while wait and wait_timeout > time.time() and img.state != 'available':
         img = ec2.get_image(image_id)
         time.sleep(3)
     if wait and wait_timeout <= time.time():
