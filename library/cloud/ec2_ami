@@ -185,6 +185,18 @@ except ImportError:
     print "failed=True msg='boto required for this module'"
     sys.exit(1)
 
+
+def wait_until_available(module, ec2, img, wait_timeout):
+    wait_timeout = time.time() + wait_timeout
+    while wait_timeout > time.time() and img.state != 'available':
+        img = ec2.get_image(img.id)
+        time.sleep(3)
+    if wait_timeout <= time.time():
+        # waiting took too long
+        module.fail_json(msg = "timed out waiting for image to be created")
+    return img
+
+
 def create_image(module, ec2):
     """
     Creates new AMI
@@ -199,6 +211,17 @@ def create_image(module, ec2):
     wait_timeout = int(module.params.get('wait_timeout'))
     description = module.params.get('description')
     no_reboot = module.params.get('no_reboot')
+
+    try:
+        images = ec2.get_all_images(owners=['self'], filters=dict(name=name))
+        if images:
+            img = images[0]
+            if wait:
+                img = wait_until_available(module, ec2, img, wait_timeout)
+            module.exit_json(msg="Image already exists", image_id=img.id, state=img.state, changed=False)
+    except boto.exception.EC2ResponseError, e:
+        if e.error_code != 'InvalidAMIID.NotFound':
+            raise
 
     try:
         params = {'instance_id': instance_id,
@@ -225,15 +248,8 @@ def create_image(module, ec2):
     else:
         module.fail_json(msg = "timed out waiting for image to be recognized")
 
-    # wait here until the image is created
-    wait_timeout = time.time() + wait_timeout
-    while wait and wait_timeout > time.time() and img.state != 'available':
-        img = ec2.get_image(image_id)
-        time.sleep(3)
-    if wait and wait_timeout <= time.time():
-        # waiting took too long
-        module.fail_json(msg = "timed out waiting for image to be created")
-
+    if wait:
+        img = wait_until_available(module, ec2, img, wait_timeout)
     module.exit_json(msg="AMI creation operation complete", image_id=image_id, state=img.state, changed=True)
     sys.exit(0)
 
