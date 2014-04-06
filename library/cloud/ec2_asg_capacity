@@ -1,0 +1,112 @@
+#!/usr/bin/python
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+
+DOCUMENTATION = """
+---
+module: ec2_asg_capacity
+short_description: Set the desired capacity for an Auto Scaling Group
+description:
+  - Has the sole purpose to set the desired capacity for an Auto Scaling Group
+version_added: "1.6"
+requirements: [ "boto" ]
+author: Yap Sok Ann
+options:
+  name:
+    description:
+      - Name of the auto scaling group
+    required: true
+  desired_capacity:
+    description:
+      - Desired number of instances in group
+    required: true
+  aws_secret_key:
+    description:
+      - AWS secret key. If not set then the value of the AWS_SECRET_KEY environment variable is used.
+    required: false
+    default: None
+    aliases: ['ec2_secret_key', 'secret_key' ]
+  aws_access_key:
+    description:
+      - AWS access key. If not set then the value of the AWS_ACCESS_KEY environment variable is used.
+    required: false
+    default: None
+    aliases: ['ec2_access_key', 'access_key' ]
+  region:
+    description:
+      - The AWS region to use. If not specified then the value of the EC2_REGION environment variable, if any, is used.
+    required: false
+    aliases: ['aws_region', 'ec2_region']
+"""
+
+EXAMPLES = '''
+- ec2_asg_capacity:
+    name: SpotPriceGroup
+    desired_capacity: 3
+'''
+
+import sys
+
+from ansible.module_utils.basic import *
+from ansible.module_utils.ec2 import *
+
+try:
+    import boto.ec2.autoscale
+    from boto.exception import BotoServerError
+except ImportError:
+    print "failed=True msg='boto required for this module'"
+    sys.exit(1)
+
+
+def set_desired_capacity(connection, module):
+    group_name = module.params['name']
+    desired_capacity = module.params['desired_capacity']
+
+    groups = connection.get_all_groups(names=[group_name])
+    if not groups:
+        module.fail_json(msg='Group %s does not exist' % group_name)
+
+    group = groups[0]
+
+    if group.desired_capacity == desired_capacity:
+        module.exit_json(changed=False)
+
+    try:
+        group.set_capacity(desired_capacity)
+        module.exit_json(changed=True)
+    except BotoServerError as e:
+        module.fail_json(msg=str(e))
+
+
+def main():
+    argument_spec = ec2_argument_spec()
+    argument_spec.update(
+        dict(
+            name=dict(required=True, type='str'),
+            desired_capacity=dict(required=True, type='int'),
+        )
+    )
+    module = AnsibleModule(argument_spec=argument_spec)
+
+    region, ec2_url, aws_connect_params = get_aws_connection_info(module)
+    try:
+        connection = connect_to_aws(boto.ec2.autoscale, region, **aws_connect_params)
+    except boto.exception.NoAuthHandlerFound, e:
+        module.fail_json(msg=str(e))
+
+    set_desired_capacity(connection, module)
+
+
+main()
