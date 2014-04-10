@@ -58,6 +58,12 @@ options:
     description:
       - Desired number of instances in group
     required: false
+  termination_policies:
+    description:
+      - List of termination policies to use
+      - Any combination of: OldestInstance, NewestInstance, OldestLaunchConfiguration, ClosestToNextInstanceHour, Default
+    require: false
+    default: ['Default']
   aws_secret_key:
     description:
       - AWS secret key. If not set then the value of the AWS_SECRET_KEY environment variable is used.
@@ -131,6 +137,7 @@ def create_autoscaling_group(connection, module):
     min_size = module.params['min_size']
     max_size = module.params['max_size']
     desired_capacity = module.params.get('desired_capacity')
+    termination_policies = module.params.get('termination_policies')
     vpc_zone_identifier = module.params.get('vpc_zone_identifier')
 
     launch_configs = connection.get_all_launch_configurations(names=[launch_config_name])
@@ -146,6 +153,7 @@ def create_autoscaling_group(connection, module):
                  min_size=min_size,
                  max_size=max_size,
                  desired_capacity=desired_capacity,
+                 termination_policies=termination_policies,
                  vpc_zone_identifier=vpc_zone_identifier,
                  connection=connection)
 
@@ -158,7 +166,7 @@ def create_autoscaling_group(connection, module):
         as_group = as_groups[0]
         changed = False
         for attr in ('launch_config_name', 'max_size', 'min_size',
-                     'vpc_zone_identifier'):
+                     'termination_policies', 'vpc_zone_identifier'):
             if getattr(as_group, attr) != module.params[attr]:
                 changed = True
                 setattr(as_group, attr, module.params.get(attr))
@@ -220,6 +228,7 @@ def main():
             min_size=dict(type='int'),
             max_size=dict(type='int'),
             desired_capacity=dict(type='int'),
+            termination_policies=dict(type='list', default=['Default']),
             vpc_zone_identifier=dict(type='str'),
             state=dict(default='present', choices=['present', 'absent']),
         )
